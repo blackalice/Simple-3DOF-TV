@@ -1,0 +1,42 @@
+# Local toolchain and build output
+.toolchain/
+.gradle/
+build/
+app/build/
+.cxx/
+dist/
+local.properties
+*.apk
+*.aab
+*.idsig
+
+# VITURE's SDK is proprietary and must never be committed or published (see README, "Legal")
+SDK/
+
+# Signing material and secrets
+keystore.properties
+*.jks
+*.keystore
+*.p12
+
+# FFmpeg source and build output (fetched / produced by tools/build_ffmpeg.sh) and native binaries
+third_party/
+*.so
+
+# Editor / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+__pycache__/
+
+# Misc. build / debug leftovers and secrets
+.kotlin/
+.externalNativeBuild/
+captures/
+*.log
+*.hprof
+.env
+.env.*
+*.pem

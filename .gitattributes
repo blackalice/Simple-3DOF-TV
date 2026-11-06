@@ -1,0 +1,14 @@
+# Normalise text files, but keep scripts that run under bash as LF even on Windows checkouts
+# (a CRLF build.sh / gradlew / build_ffmpeg.sh fails with "\r: command not found").
+* text=auto
+*.sh text eol=lf
+gradlew text eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=lf
+
+# Binary files: never touch
+*.png binary
+*.jpg binary
+*.jar binary
+*.so binary
+*.a binary

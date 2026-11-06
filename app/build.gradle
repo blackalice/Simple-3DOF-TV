@@ -1,0 +1,136 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing comes from keystore.properties in the repo root (git-ignored): storeFile, storePassword, keyAlias,
+// keyPassword. Without it the release APK is left unsigned (and build.ps1 -Release refuses to run).
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystoreProps.load(it) }
+
+android {
+    namespace 'com.portable3dof'
+    compileSdk 34
+    ndkVersion '27.3.13750724'
+
+    defaultConfig {
+        applicationId 'com.portable3dof'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+
+        // The Pocket TV Pro is 32-bit only; VITURE's SDK ships a matching armeabi-v7a libglasses.so.
+        ndk { abiFilters 'armeabi-v7a' }
+        externalNativeBuild {
+            cmake { cppFlags '-std=c++17'; arguments '-DANDROID_STL=c++_static' }
+        }
+    }
+
+    buildFeatures { buildConfig true }
+
+    // Two editions (see README "Editions"). "core" is the one that can be distributed as a binary together with
+    // VITURE's proprietary libraries; "youtube" adds NewPipeExtractor (GPL-3.0) and is for building from source.
+    flavorDimensions 'edition'
+    productFlavors {
+        core {
+            dimension 'edition'
+            buildConfigField 'boolean', 'YOUTUBE', 'false'
+        }
+        youtube {
+            dimension 'edition'
+            buildConfigField 'boolean', 'YOUTUBE', 'true'
+            versionNameSuffix '-youtube'
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            version '3.22.1'
+        }
+    }
+
+    // VITURE's prebuilt libglasses.so / libcloud_protocol.so / libcarina_vio.so live in SDK/android/<abi>/ (not in this
+    // repository: you download the SDK from VITURE). libffmpegJNI.so (TrueHD / DTS decoding) is built from source by
+    // CMake when tools/build_ffmpeg.sh has been run; see DEVELOPMENT.md.
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['../SDK/android']
+            // In-app legal documents (repo folder legal/) plus VITURE's licence and notices, copied from the SDK at build time.
+            assets.srcDirs = ['src/main/assets', '../legal', "$buildDir/generated/viture-assets"]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+        coreLibraryDesugaringEnabled true      // NewPipeExtractor needs java.time etc. below API 33
+    }
+
+    packaging {
+        resources { excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/INDEX.LIST',
+                                 'META-INF/*.kotlin_module', 'META-INF/versions/**', 'META-INF/proguard/**'] }
+    }
+
+    signingConfigs {
+        // Debug builds: keep using the project's own key when it exists so updates install over earlier dev builds.
+        // Otherwise Android's default debug key is used.
+        if (rootProject.file('.toolchain/debug.keystore').exists()) {
+            debug {
+                storeFile rootProject.file('.toolchain/debug.keystore')
+                storePassword 'android'
+                keyAlias 'debug'
+                keyPassword 'android'
+            }
+        }
+        if (keystoreFile.exists()) {
+            release {
+                storeFile rootProject.file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystoreFile.exists()) signingConfig signingConfigs.release
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "simple-3dof-tv-${variant.flavorName}-${variant.buildType.name}.apk"
+        }
+    }
+}
+
+// Friendly failure when the SDK has not been put in place, and VITURE's notices copied into the APK's assets.
+def vitureSdk = rootProject.file('SDK/android')
+def copyViture = tasks.register('copyVitureNotices', Copy) {
+    from(vitureSdk) { include 'LICENSE', 'NOTICE'; rename { "viture_${it}.txt" } }
+    into layout.buildDirectory.dir('generated/viture-assets')
+    doFirst {
+        if (!new File(vitureSdk, 'armeabi-v7a/libglasses.so').exists()) {
+            throw new GradleException('VITURE SDK not found. Download it from VITURE and extract it so that ' +
+                    'SDK/android/armeabi-v7a/libglasses.so exists (see README, "Building").')
+        }
+    }
+}
+tasks.named('preBuild') { dependsOn copyViture }
+
+dependencies {
+    def media3 = '1.4.1'
+    implementation "androidx.media3:media3-exoplayer:$media3"
+    implementation "androidx.media3:media3-exoplayer-hls:$media3"
+    implementation "androidx.media3:media3-exoplayer-dash:$media3"
+    implementation 'androidx.annotation:annotation:1.3.0'
+
+    // YouTube edition only: stream/search extraction (GPL-3.0) + HTTP
+    youtubeImplementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.26.5'
+    youtubeImplementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.1.4'
+}
