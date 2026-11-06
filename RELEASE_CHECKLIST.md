@@ -3,7 +3,7 @@
 Things to finish before the first public release. The legal documents are written to follow VITURE's developer
 terms as summarised below, but they are drafts for you to review: this is not legal advice.
 
-## Fill in the placeholders
+## Placeholders (done 2026-11-06)
 
 Search for `[YOUR` and `[CONTACT` and replace them (`build.ps1 -Release` refuses to build while any remain):
 

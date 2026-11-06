@@ -6,7 +6,7 @@ Please read this agreement. By choosing Accept when the app first starts, or by 
 
 ## 1. What this is
 
-Simple 3DOF TV ("the app") is a free media player that shows video on a virtual screen and follows your head movement. It is provided by [YOUR NAME] ("the author"). The app's own source code is published under the MIT Licence (see the LICENSE file in the source repository). This agreement covers your use of the compiled app, including the components bundled in it.
+Simple 3DOF TV ("the app") is a free media player that shows video on a virtual screen and follows your head movement. It is provided by Stuart Foy ("the author"). The app's own source code is published under the MIT Licence (see the LICENSE file in the source repository). This agreement covers your use of the compiled app, including the components bundled in it.
 
 ## 2. VITURE components
 
@@ -56,6 +56,6 @@ This agreement ends automatically if you break it. When it ends you must stop us
 
 ## 11. General
 
-If part of this agreement cannot be enforced, the rest still applies. VITURE is an intended beneficiary of sections 2, 4, 7, 8 and 9 and may enforce them. This agreement is governed by the laws of [YOUR COUNTRY OR STATE], and the courts there have jurisdiction, except where your local consumer law says otherwise.
+If part of this agreement cannot be enforced, the rest still applies. VITURE is an intended beneficiary of sections 2, 4, 7, 8 and 9 and may enforce them. This agreement is governed by the laws of England and Wales, and the courts there have jurisdiction, except where your local consumer law says otherwise.
 
-Contact: [CONTACT EMAIL]
+Contact: stu@rtfoy.co.uk

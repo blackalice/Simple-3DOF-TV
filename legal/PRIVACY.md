@@ -6,7 +6,7 @@ Simple 3DOF TV, version 1.0
 
 The app has no accounts, no analytics, no advertising and no crash reporting, and it does not send anything to the author. Everything it remembers stays on your device. The only network connections are the ones you cause by using the web browser or (in the YouTube edition) YouTube.
 
-The person responsible for this app is [YOUR NAME], contact [CONTACT EMAIL].
+The person responsible for this app is Stuart Foy, contact stu@rtfoy.co.uk.
 
 ## What is stored on your device
 

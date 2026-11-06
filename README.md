@@ -59,8 +59,8 @@ Pocket TV on your network. Everything else is downloaded for you.
 
 1. **Get the code**
    ```
-   git clone <this repository's address>
-   cd <the folder it created>
+   git clone https://github.com/blackalice/Simple-3DOF-TV.git
+   cd Simple-3DOF-TV
    ```
 2. **Add VITURE's SDK.** It is VITURE's proprietary software, so it is not in this repository: download the VITURE glasses SDK
    for Android from VITURE's developer site and extract it into the `SDK` folder, so that this file exists:
