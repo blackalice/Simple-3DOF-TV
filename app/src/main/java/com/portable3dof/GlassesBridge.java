@@ -9,10 +9,13 @@ public final class GlassesBridge {
 
     private GlassesBridge() { }
 
-    /** Create provider from the USB product id + file descriptor, start it, and open the IMU (pose mode). 0 = ok. */
+    /** Start tracking: 0 = pose callback, 1 = glasses' native 3DOF, 2 = Carina; negative = error. */
     public static native int begin(int productId, int usbFd);
 
     public static native void end();
+
+    public static native int recenterNative();
+    public static native boolean getCarinaPose(float[] out);
 
     /** Copies [roll, pitch, yaw, qw, qx, qy, qz] into out and returns a sequence number (0 = none yet). */
     public static native long getPose(float[] out);

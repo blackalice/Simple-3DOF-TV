@@ -40,3 +40,6 @@ captures/
 .env
 .env.*
 *.pem
+
+# Local-only notes (release posts, drafts): never committed
+promo/

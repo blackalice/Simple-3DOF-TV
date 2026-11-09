@@ -175,8 +175,14 @@ public class MainActivity extends Activity implements SensorEventListener, PoseL
             sensorManager.registerListener(this, accel, 5000);
         }
         poseFilter.reset();
-        probe = new GlassesProbe(this, this);
-        probe.start();
+        // The system USB permission dialog can pause this activity. Keep its receiver alive
+        // across that pause and do not request permission again when the activity resumes.
+        if (probe == null) {
+            probe = new GlassesProbe(this, this);
+            probe.start();
+        } else {
+            probe.checkForGlasses();
+        }
         ((DisplayManager) getSystemService(Context.DISPLAY_SERVICE)).registerDisplayListener(this, null);
         applyDisplaySettings();
         registerStorageReceiver();
@@ -193,13 +199,13 @@ public class MainActivity extends Activity implements SensorEventListener, PoseL
         if (storageReceiver != null) { unregisterReceiver(storageReceiver); storageReceiver = null; }
         playerUi.stop();
         playerUi.pauseApp();           // remembers what was playing, saves the position, frees the decoder
-        if (probe != null) { probe.stop(); probe = null; }
         glView.onPause();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (probe != null) { probe.stop(); probe = null; }
         browserController.close();
         engine.close();
     }
@@ -218,7 +224,12 @@ public class MainActivity extends Activity implements SensorEventListener, PoseL
     // ---- PlayerUi.Host ----------------------------------------------------------------------
 
     @Override
-    public void recenter() { recenterRequested = true; }
+    public void recenter() {
+        if (probe != null && probe.isNativeTracking()) {
+            renderer.clearOrientation();
+            probe.recenterNative();
+        } else recenterRequested = true;
+    }
 
     @Override
     public void requestAllFilesAccess() {
@@ -288,6 +299,7 @@ public class MainActivity extends Activity implements SensorEventListener, PoseL
     @Override
     public String trackingStatus() {
         if (probe != null && probe.isStreaming()) {
+            if (probe.isNativeTracking()) return "Head tracking: VITURE native 3DOF";
             return String.format(Locale.US, "Head tracking: VITURE glasses  \u00b7  %.0f Hz", probe.getRateHz());
         }
         String g = probe != null ? probe.statusLine() : "";

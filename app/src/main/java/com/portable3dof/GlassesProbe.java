@@ -32,6 +32,26 @@ public class GlassesProbe extends BroadcastReceiver implements Runnable {
 
     private Thread thread;
     private UsbDeviceConnection conn;
+    private String requestedDeviceName;
+    private boolean permissionPending;
+    private volatile int trackingMode = 0;
+    private String connectedDeviceName;
+    private final BroadcastReceiver usbEvents = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) {
+            UsbDevice dev = i.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+            if (dev == null || dev.getVendorId() != VITURE_VID) return;
+            if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(i.getAction())) {
+                if (dev.getDeviceName().equals(connectedDeviceName)) closeConnection();
+                if (dev.getDeviceName().equals(requestedDeviceName)) {
+                    requestedDeviceName = null;
+                    permissionPending = false;
+                }
+                status = "glasses disconnected";
+            } else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(i.getAction())) {
+                checkForGlasses();
+            }
+        }
+    };
 
     public GlassesProbe(Context ctx, PoseListener listener) {
         this.ctx = ctx;
@@ -46,12 +66,25 @@ public class GlassesProbe extends BroadcastReceiver implements Runnable {
         } else {
             ctx.registerReceiver(this, f);
         }
+        IntentFilter events = new IntentFilter();
+        events.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+        events.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+        if (android.os.Build.VERSION.SDK_INT >= 33) ctx.registerReceiver(usbEvents, events, Context.RECEIVER_EXPORTED);
+        else ctx.registerReceiver(usbEvents, events);
+        checkForGlasses();
+    }
+
+    /** Recheck on resume without repeating a pending or refused permission request. */
+    public void checkForGlasses() {
+        if (running) return;
         UsbDevice dev = find();
         if (dev == null) { status = "glasses not found on USB"; return; }
         if (usb.hasPermission(dev)) {
             open(dev);
-        } else {
+        } else if (!permissionPending && !dev.getDeviceName().equals(requestedDeviceName)) {
             status = "requesting USB permission...";
+            requestedDeviceName = dev.getDeviceName();
+            permissionPending = true;
             Intent i = new Intent(ACTION).setPackage(ctx.getPackageName());
             PendingIntent pi = PendingIntent.getBroadcast(ctx, 0, i, PendingIntent.FLAG_MUTABLE);
             usb.requestPermission(dev, pi);
@@ -59,12 +92,20 @@ public class GlassesProbe extends BroadcastReceiver implements Runnable {
     }
 
     public void stop() {
-        running = false;
         try { ctx.unregisterReceiver(this); } catch (Exception ignored) { }
+        try { ctx.unregisterReceiver(usbEvents); } catch (Exception ignored) { }
+        closeConnection();
+    }
+
+    private synchronized void closeConnection() {
+        running = false;
         if (thread != null) { try { thread.join(600); } catch (InterruptedException ignored) { } }
         thread = null;
         try { GlassesBridge.end(); } catch (Throwable ignored) { }
         if (conn != null) { conn.close(); conn = null; }
+        connectedDeviceName = null;
+        trackingMode = 0;
+        lastPoseNs = 0;
     }
 
     private UsbDevice find() {
@@ -76,8 +117,11 @@ public class GlassesProbe extends BroadcastReceiver implements Runnable {
 
     @Override
     public void onReceive(Context c, Intent i) {
+        if (!permissionPending) return;
+        permissionPending = false;
         UsbDevice dev = i.getParcelableExtra(UsbManager.EXTRA_DEVICE);
-        if (dev != null && i.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+        if (dev != null && dev.getDeviceName().equals(requestedDeviceName)
+                && i.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
             open(dev);
         } else {
             status = "USB permission denied";
@@ -88,15 +132,19 @@ public class GlassesProbe extends BroadcastReceiver implements Runnable {
         if (running) return;
         conn = usb.openDevice(dev);
         if (conn == null) { status = "openDevice failed"; return; }
+        connectedDeviceName = dev.getDeviceName();
         int rc;
         try {
             rc = GlassesBridge.begin(dev.getProductId(), conn.getFileDescriptor());
         } catch (Throwable t) {
             status = "SDK load failed: " + t.getMessage();
+            conn.close(); conn = null; connectedDeviceName = null;
             return;
         }
-        if (rc != 0) { status = "SDK begin failed: " + rc; return; }
+        if (rc < 0 || rc > 2) { status = "SDK begin failed: " + rc; conn.close(); conn = null; connectedDeviceName = null; return; }
+        trackingMode = rc;
         running = true;
+        if (trackingMode == 1) { status = "native 3DOF active"; return; }
         status = "SDK started, waiting for pose";
         thread = new Thread(this, "glasses-pose");
         thread.start();
@@ -110,6 +158,21 @@ public class GlassesProbe extends BroadcastReceiver implements Runnable {
         long winStart = System.nanoTime();
         int winCount = 0;
         while (running) {
+            if (trackingMode == 2) {
+                if (GlassesBridge.getCarinaPose(p)) {
+                    lastPoseNs = System.nanoTime();
+                    poses++;
+                    winCount++;
+                    if (listener != null) listener.onGlassesPose(p[3], p[4], p[5], p[6]);
+                }
+                long now = System.nanoTime();
+                if (now - winStart > 1000000000L) {
+                    hz = winCount * 1e9f / (now - winStart); winCount = 0; winStart = now;
+                    status = now - lastPoseNs < 1000000000L ? "Carina pose" : "waiting for Carina pose";
+                }
+                try { Thread.sleep(8); } catch (InterruptedException ignored) { }
+                continue;
+            }
             // Blocks inside the SDK bridge until the next sample is delivered (no polling jitter).
             long seq = GlassesBridge.waitPose(p, lastSeq, 50);
             long now = System.nanoTime();
@@ -131,7 +194,16 @@ public class GlassesProbe extends BroadcastReceiver implements Runnable {
     }
 
     public boolean isStreaming() {
-        return System.nanoTime() - lastPoseNs < 500000000L;
+        return running && (trackingMode == 1 || System.nanoTime() - lastPoseNs < 500000000L);
+    }
+
+    public boolean isNativeTracking() { return running && trackingMode == 1; }
+
+    public synchronized void recenterNative() {
+        if (isNativeTracking()) {
+            int rc = GlassesBridge.recenterNative();
+            if (rc != 0) status = "native recenter failed: " + rc;
+        }
     }
 
     public float getRateHz() { return hz; }
